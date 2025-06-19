@@ -37,6 +37,8 @@ namespace GooseAPI.Controllers
 
         }
 
+
+
         private bool IsAuthorized(string userName,string apiKey)
         {
             FirebaseService firebaseService = new FirebaseService();

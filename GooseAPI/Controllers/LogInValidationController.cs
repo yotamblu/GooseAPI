@@ -3,7 +3,7 @@ using FireSharp.Serialization.JsonNet;
 namespace GooseAPI.Controllers
 {
     [ApiController]
-    [Route("api/LoginValidation")]
+    [Route("api/userAuth")]
     public class LogInValidationController : Controller
     {
         [HttpPost]
@@ -11,12 +11,17 @@ namespace GooseAPI.Controllers
         {
             FirebaseService fbService = new FirebaseService();
             User requestedUser = fbService.GetData<User>($"Users/{credentials.userName}");
-           if(requestedUser == null || requestedUser.Password !=  GooseAPIUtils.ComputeSha256Hash(credentials.password))
+           if(requestedUser == null || requestedUser.Password !=  credentials.hashedPassword)
             {
                 return Unauthorized(new Message("The User Credentials Supplied Were Wrong!"));
             }
            
-            return Ok(requestedUser);
+            return Ok(new {
+                message = "Valid Credentials,Authroized",
+                authorized = true,
+                apiKey = requestedUser.ApiKey
+            
+            });
 
             
         }
