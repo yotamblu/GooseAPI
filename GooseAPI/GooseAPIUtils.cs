@@ -105,6 +105,57 @@ namespace GooseAPI
         }
 
 
+        public static User GetUser(string username) => new FirebaseService().GetData<User>($"/Users/{username}");
+
+
+
+        public static bool IsAlreadyConnected(string athleteUserName, string coachUserName)
+        {
+            Dictionary<string, AthleteCoachConnection> allCons = new FirebaseService()
+                .GetData<Dictionary<string, AthleteCoachConnection>>("/AthleteCoachConnections");
+            foreach(KeyValuePair<string, AthleteCoachConnection> kvp in allCons)
+            {
+                AthleteCoachConnection connection = kvp.Value;
+                if(connection.CoachUserName == coachUserName && connection.AthleteUserName == athleteUserName)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+
+        }
+
+
+
+        public static string GenerateShortHexId()
+        {
+            byte[] buffer = Guid.NewGuid().ToByteArray();
+            // Take the first 6 bytes (12 hex characters)
+            return BitConverter.ToString(buffer, 0, 6).Replace("-", "").ToLower();
+        }
+        public static string GetCoachById(string coachId)
+        {
+            FirebaseService firebaseService = new FirebaseService();
+            Dictionary<string, CoachData> allCoachData = firebaseService.GetData<Dictionary<string, CoachData>>("/CoachCodes");
+            CoachData coachData = null;
+            foreach(KeyValuePair<string, CoachData> kvp in allCoachData)
+            {
+                if(kvp.Value.CoachId == coachId)
+                {
+                    coachData = kvp.Value;
+                }
+            }
+            if(coachData == null)
+            {
+                return string.Empty;
+            }
+            
+            return coachData.CoachUserName;
+
+
+        }
+
 
         public static string GetUserAccessToken(string userName)
         {
