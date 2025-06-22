@@ -7,31 +7,25 @@ namespace GooseAPI.Controllers
     public class AthletesController : Controller
     {
         [HttpGet]
-        public IActionResult Get(string apiKey)
+        public IActionResult GetAthletes([FromQuery] string apiKey)
         {
-
-            List<string> list = new List<string>();
-
-
-            FirebaseService fbService = new FirebaseService();
-            foreach(KeyValuePair<string, User> kvp in  fbService.GetData<Dictionary<string,User>>("Users")) {
-            
-                if(kvp.Value.ApiKey == apiKey)
-                {
-                    foreach (KeyValuePair<string,AthleteCoachConnection> conn in fbService.GetData<Dictionary<string, AthleteCoachConnection>>("AthleteCoachConnections"))
-                    {
-                        if(conn.Value.CoachUserName == kvp.Value.UserName)
-                        {
-                            list.Add(conn.Value.AthleteUserName);
-                        }
-                    }
-                }
-
-            
+            string userName = GooseAPIUtils.FindUserNameByAPIKey(apiKey);
+            if (GooseAPIUtils.GetUser(userName).Role != "coach")
+            {
+                return Unauthorized(new { message = "only coaches have athletes connected to them" });
             }
+            Dictionary<string, AthleteCoachConnection> athleteCoachConnections = new FirebaseService().GetData<Dictionary<string, AthleteCoachConnection>>("/AthleteCoachConnections");
+            List<string> athletesList = athleteCoachConnections.Values
+            .Where(c => c.CoachUserName == userName)
+            .Select(c => c.AthleteUserName)
+            .ToList();
 
 
-            return Ok(list);
+            return Ok(new GetAthletesResponseData
+            {
+                athletes = athletesList
+            });
+
         }
     }
 }
