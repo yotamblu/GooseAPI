@@ -20,12 +20,18 @@ namespace GooseAPI.Controllers
             .Select(c => c.AthleteUserName)
             .ToList();
 
-
-            return Ok(new GetAthletesResponseData
+            List<AthleteCard> athleteCards = new List<AthleteCard>();
+            foreach (string athlete in athletesList)
             {
-                athletes = athletesList
-            });
+                athleteCards.Add(new AthleteCard
+                {
+                    athleteName = athlete,
+                    imageData = GooseAPIUtils.GetUser(athlete).ProfilePicString
+                });
+            }
 
+            
+            return Ok(new GetAthletesResponseData { athletesData = athleteCards});
         }
     }
 }

@@ -11,6 +11,7 @@
     <PackageReference Include="FireSharp.Serialization.JsonNet" Version="1.1.0" />
     <PackageReference Include="Swashbuckle.AspNetCore" Version="6.4.0" />
     <PackageReference Include="System.Drawing.Common" Version="9.0.6" />
+    <PackageReference Include="System.Security.Permissions" Version="9.0.6" />
   </ItemGroup>
 
 </Project>

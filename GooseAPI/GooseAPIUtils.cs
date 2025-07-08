@@ -4,6 +4,8 @@ using System.Security.Cryptography;
 using System.Text;
 using static System.Net.Mime.MediaTypeNames;
 using System.Drawing.Imaging;
+using System.Runtime.InteropServices;
+using System.Globalization;
 
 namespace GooseAPI
 {
@@ -19,6 +21,21 @@ namespace GooseAPI
                 }
             }
             return string.Empty;
+        }
+
+
+        public static bool IsCoachingUser(string coachName,string athleteName)
+        {
+            Dictionary<string,AthleteCoachConnection> allCons = new FirebaseService().GetData<Dictionary<string, AthleteCoachConnection>>("/AthleteCoachConnections");
+            foreach(KeyValuePair<string,AthleteCoachConnection> con in allCons)
+            {
+                if(con.Value.AthleteUserName == athleteName && con.Value.CoachUserName == coachName)
+                {
+                    return true;
+                    
+                }
+            }
+            return false;
         }
 
 
@@ -44,9 +61,38 @@ namespace GooseAPI
         }
 
 
+        public static GarminData GetUserAccessTokenAndSecret(string userName)
+        {
+            if (GetUser(userName).Role != "athlete") {
+                return null;
+            }
 
-      
-            private const string chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+            GarminData apiCreds = new FirebaseService().GetData<GarminData>($"/GarminData/{userName}");
+
+            return apiCreds == null ? null : apiCreds;
+
+
+        }
+
+        public static string ConvertDateFormat(string inputDate)
+        {
+            // Parse the input string assuming it's in "yyyy-MM-dd" format
+            if (DateTime.TryParseExact(inputDate, "yyyy-MM-dd", CultureInfo.InvariantCulture,
+                                       DateTimeStyles.None, out DateTime parsedDate))
+            {
+                // Return the date formatted as "MM/dd/yyyy"
+                return parsedDate.ToString("MM/dd/yyyy");
+            }
+            else
+            {
+                throw new FormatException("Input date is not in the expected yyyy-MM-dd format.");
+            }
+        }
+
+
+
+
+        private const string chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
 
             public static string GenerateApiKey(int length = 32)
             {

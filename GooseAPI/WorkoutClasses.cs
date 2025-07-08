@@ -31,4 +31,21 @@
         public int LapDurationInSeconds { get; set; }
         public float LapPaceInMinKm { get; set; }
     }
+
+
+    public class WorkoutData
+    {
+        public string workoutName { get; set; }
+        public string description { get; set; }
+
+        public string sport = "RUNNING";
+
+        public List<Interval> steps = new List<Interval>();
+
+
+
+    }
+
+    
+
 }

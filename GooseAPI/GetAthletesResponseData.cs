@@ -2,6 +2,7 @@
 {
     public class GetAthletesResponseData
     {
-        public List<string> athletes {  get; set; }
+        public List<AthleteCard> athletesData {  get; set; }
+
     }
 }
