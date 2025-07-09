@@ -100,5 +100,31 @@ namespace GooseAPI.Controllers
 
             return Ok(new { message = "athlete added to flock successfully"});
         }
+
+        [HttpGet("getPotentialFlocks")]
+        public IActionResult getPotentialFlocks([FromQuery] string apikey, [FromQuery] string athleteName)
+        {
+            string coachUserName = GooseAPIUtils.FindUserNameByAPIKey(apikey);
+            User coachUser = GooseAPIUtils.GetUser(coachUserName);
+            if( coachUser == null 
+                || coachUser.Role != "coach" 
+                ||!GooseAPIUtils.IsCoachingUser(coachUserName,athleteName) 
+                || GooseAPIUtils.GetUser(athleteName) == null || GooseAPIUtils.GetUser(athleteName).Role != "athlete")
+            {
+                return Unauthorized(new { message = "only coaches can view potential flocks for their athletes" });
+            }
+            List<string> potentialFlockNames = new List<string>();
+            FirebaseService firebaseService = new FirebaseService();
+            Dictionary<string,Flock> flocksDict =  firebaseService.GetData<Dictionary<string, Flock>>($"/Flocks/{coachUserName}");
+            foreach(KeyValuePair<string,Flock> kvp in  flocksDict)
+            {
+                if (kvp.Value.athletesUserNames == null || !kvp.Value.athletesUserNames.Contains(athleteName))
+                {
+                    potentialFlockNames.Add(kvp.Key);
+                }
+            }
+
+            return Ok(new { potentialFlocks = potentialFlockNames });
+        }
     }
 }
