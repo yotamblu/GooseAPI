@@ -13,7 +13,9 @@
         public string WorkoutCoordsJsonStr { get; set; }
 
         public string WorkoutDate { get; set; }
-
+        
+        public string ProfilePicData { get; set; }
+        public string AthleteName {  get; set; }
 
 
     }

@@ -27,9 +27,11 @@ namespace GooseAPI.Controllers
                             WorkoutDurationInSeconds = kvp.Value.WorkoutDurationInSeconds,
                             WorkoutId = kvp.Value.WorkoutId,
                             WorkoutName = kvp.Value.WokroutName,
-                            WorkoutAvgPaceInMinKm = kvp.Value.WorkoutAvgPaceInMinKm
+                            WorkoutAvgPaceInMinKm = kvp.Value.WorkoutAvgPaceInMinKm,
+                            AthleteName = userName,
+                            ProfilePicData = GooseAPIUtils.GetUser(userName).ProfilePicString
 
-                        });
+                        }) ;
                     }
                 }
                 return Ok(workouts);
