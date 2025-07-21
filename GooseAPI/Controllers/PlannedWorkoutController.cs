@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using FireSharp;
+using Microsoft.AspNetCore.Mvc;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using System;
@@ -9,13 +10,172 @@ using System.Text.Json.Nodes;
 namespace GooseAPI.Controllers
 {
     [ApiController]
-    [Route($"/api/addWorkout")]
+
     public class PlannedWorkoutController : Controller
     {
+        public class WorkoutStep
+{
+    public string targetType { get; set; }
+    public int stepOrder { get; set; }
+    public int repeatValue { get; set; }
+    public string type { get; set; }
+    public List<WorkoutStep> steps { get; set; }
+    public string description { get; set; }
+    public string durationType { get; set; }
+    public double durationValue { get; set; }
+    public string intensity { get; set; }
+    public double targetValueLow { get; set; }
+    public double targetValueHigh { get; set; }
+    public string repeatType { get; set; }
+}
+
+public class Workout
+{
+    public string sport { get; set; }
+    public List<WorkoutStep> steps { get; set; }
+    public string workoutName { get; set; }
+    public string description { get; set; }
+}
+
+
+        public static string FormatWorkoutJson(string json)
+        {
+
+            if (json.StartsWith("\"{") && json.EndsWith("}\""))
+            {
+                // First: Convert the outer string to actual JSON
+                json = JsonConvert.DeserializeObject<string>(json);
+            }
+            Workout workout = JsonConvert.DeserializeObject<Workout>(json); 
+            var sb = new StringBuilder();
+
+            foreach (var step in workout.steps)
+            {
+                if (step.type == "WorkoutRepeatStep")
+                {
+                    sb.Append($"{step.repeatValue} * (");
+
+                    var parts = new List<string>();
+                    foreach (var subStep in step.steps)
+                    {
+                        if (subStep.durationType == "DISTANCE")
+                        {
+                            // Convert pace from m/s to min/km mm:ss
+                            string paceStr = FormatPace(subStep.targetValueHigh);
+                            string distanceStr = FormatDistance(subStep.durationValue);
+                            if (subStep.intensity == "REST")
+                            {
+                                parts.Add($"{distanceStr} rest");
+                            }
+                            else
+                            {
+                                parts.Add($"{distanceStr} @ {paceStr}");
+                            }
+                        }
+                        else if (subStep.durationType == "TIME")
+                        {
+                            string timeStr = FormatTime(subStep.durationValue);
+                            if (subStep.intensity == "REST")
+                            {
+                                parts.Add($"{timeStr} rest");
+                            }
+                            else
+                            {
+                                parts.Add($"{timeStr}");
+                            }
+                        }
+                    }
+
+                    sb.Append(string.Join(", ", parts));
+                    sb.AppendLine(")");
+                }
+            }
+
+            return sb.ToString().TrimEnd();
+        }
+
+        private static string FormatPace(double metersPerSecond)
+        {
+            if (metersPerSecond <= 0) return "--:--";
+
+            // pace in min/km = 16.6667 / m/s
+            double paceMinPerKm = 16.6667 / metersPerSecond;
+            int minutes = (int)paceMinPerKm;
+            int seconds = (int)Math.Round((paceMinPerKm - minutes) * 60);
+
+            if (seconds == 60)
+            {
+                minutes += 1;
+                seconds = 0;
+            }
+
+            return $"{minutes:D2}:{seconds:D2}";
+        }
+
+        private static string FormatDistance(double meters)
+        {
+            if (meters >= 1000)
+                return $"{meters / 1000:0.#}KM";
+            else
+                return $"{meters:0}M";
+        }
+
+        private static string FormatTime(double seconds)
+        {
+            int mins = (int)(seconds / 60);
+            int secs = (int)(seconds % 60);
+            return $"{mins:D2}:{secs:D2}";
+        }
+
+
         private const string workoutPushUrl = "https://apis.garmin.com/training-api/workout";
         private const string workoutscheduleUrl = "https://apis.garmin.com/training-api/schedule";
 
-        [HttpPost]
+        [HttpGet($"/api/plannedWorkout/byId")]
+        public IActionResult GetPlannedWorkoutById([FromQuery] string id)
+        {
+            PlannedWorkout plannedWorkout = new FirebaseService().GetData<PlannedWorkout>($"/PlannedWorkouts/{id}");
+            var response = new FirebaseClient(FireBaseConfig.config).Get($"/PlannedWorkoutsJSON/{id}");
+            string plannedWorkoutJSON = response.Body;
+            if (plannedWorkoutJSON == null )
+            {
+                return BadRequest(new {message = "no planned workout with this id was found"});
+            }
+
+            return Ok(new {worokutObject = plannedWorkout, plannedWorkoutJson = FormatWorkoutJson(plannedWorkoutJSON)});
+        }
+
+
+        [HttpGet($"/api/plannedWorkout/byDate")]
+        public IActionResult GetPlannedWorkoutsByDate([FromQuery] string apiKey, [FromQuery] string athleteName, [FromQuery] string date)
+        {
+            User requestingUser = GooseAPIUtils.GetUser(GooseAPIUtils.FindUserNameByAPIKey(apiKey));
+            User athleteUser = GooseAPIUtils.GetUser(athleteName);
+            if (requestingUser == null || athleteUser == null || athleteUser.Role != "athlete" ||!(GooseAPIUtils.IsCoachingUser(requestingUser.UserName, athleteName) || requestingUser.UserName == athleteName))
+            {
+                return Unauthorized(new { message = "you are not authorized to view workouts for this user" });    
+            }
+
+            FirebaseService firebaseService = new FirebaseService();
+            List<PlannedWorkout> plannedWorkouts = new List<PlannedWorkout>();
+            Dictionary<string, PlannedWorkout> allPlannedWorkouts = firebaseService.GetData<Dictionary<string, PlannedWorkout>>("/PlannedWorkouts");
+            foreach(KeyValuePair<string, PlannedWorkout> kvp in allPlannedWorkouts)
+            {
+                PlannedWorkout currentWorkout = kvp.Value;
+                if(currentWorkout.AthleteNames.Contains(athleteName) && currentWorkout.Date == date)
+                {
+                    plannedWorkouts.Add(currentWorkout);
+                    currentWorkout.workoutId = kvp.Key;
+                }
+            }
+
+
+
+            return Ok(plannedWorkouts);
+        }
+
+
+        [HttpPost($"/api/addWorkout")]
         public IActionResult AddWorkout([FromBody] PlannedWorkoutData workoutData, [FromQuery] string apikey)
         {
             // if for singular athlete
@@ -91,7 +251,7 @@ namespace GooseAPI.Controllers
                 Intervals = workout.steps,
                 AthleteNames = athleteNames,
                 CoachName = coachName,
-                Date = GooseAPIUtils.ConvertDateFormat(workoutDate),
+                Date = GooseAPIUtils.RemoveLeadingZeros(GooseAPIUtils.ConvertDateFormat(workoutDate)),
                 Description = workout.description,
                 WorkoutName = workout.workoutName,
             };

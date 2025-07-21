@@ -1,4 +1,5 @@
 ﻿using Microsoft.AspNetCore.Mvc;
+using System.Reflection.Metadata;
 
 namespace GooseAPI.Controllers
 {
@@ -37,6 +38,50 @@ namespace GooseAPI.Controllers
                 return Ok(workouts);
             }
 
+        }
+        [HttpGet("getWorkout")]
+        public IActionResult GetWorkout([FromQuery] string userName,[FromQuery] string id)
+        {
+            FirebaseService firebaseService = new FirebaseService();
+            GarminData data = firebaseService.GetData<GarminData>($"/GarminData/{userName}");
+            if(data == null) {
+                return BadRequest(new { message = "this user is not conneted with Garmin" });
+            }
+            Workout workout = firebaseService.GetData<Workout>($"/Activities/{data.userAccessToken}/{id}");
+            if(workout == null)
+            {
+                return BadRequest(new { message = "no workout with this id was found" });
+            }
+
+            return Ok(workout);
+        }
+
+        [HttpGet("data")]
+        public IActionResult GetWorkoutData([FromQuery] string workoutId, [FromQuery] string userName)
+        {
+            if(GooseAPIUtils.GetUser(userName) == null)
+            {
+                return BadRequest(new { message = "there is no such userName" });
+            }
+            
+
+            FirebaseService service = new FirebaseService();
+            GarminData garminData = service.GetData<GarminData>($"/GarminData/{userName}");
+            if(garminData == null) {
+                return BadRequest(new { message = "this athlete is not connected to garmin with GooseNet" });
+            
+            }
+            Workout workout = service.GetData<Workout>($"/Activities/{garminData.userAccessToken}/{workoutId}");
+            if(workout == null)
+            {
+                return BadRequest(new { message = "workout not found" });
+            }
+            return Ok(new WorkoutExtensiveData
+            {
+                dataSamples = workout.DataSamples,
+                workoutLaps = workout.WorkoutLaps
+
+            });
         }
 
 

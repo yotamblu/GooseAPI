@@ -1,4 +1,6 @@
-﻿namespace GooseAPI
+﻿using System.Data.Common;
+
+namespace GooseAPI
 {
     public class Workout
     {
@@ -20,6 +22,8 @@
         public string UserAccessToken { get; set; }
 
 
+        public List<DataSample> DataSamples { get; set; }
+
         public string WorkoutDate { get; set; }
     }
 
@@ -30,6 +34,8 @@
         public float LapDistanceInKilometers { get; set; }
         public int LapDurationInSeconds { get; set; }
         public float LapPaceInMinKm { get; set; }
+
+        public int AvgHeartRate { get; set; }
     }
 
 

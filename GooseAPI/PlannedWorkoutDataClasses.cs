@@ -9,7 +9,7 @@
         public string CoachName { get; set; }
         public List<string> AthleteNames { get; set; }
 
-
+        public string workoutId {  get; set; }
 
     }
 

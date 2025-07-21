@@ -39,6 +39,26 @@ namespace GooseAPI
         }
 
 
+
+        public static string RemoveLeadingZeros(string dateStr)
+        {
+            // Try parsing the date using common formats
+            string[] formats = {
+            "MM/dd/yyyy", "dd/MM/yyyy", "yyyy-MM-dd",
+            "M/d/yyyy", "d/M/yyyy", "yyyy-M-d"
+        };
+
+            if (DateTime.TryParseExact(dateStr, formats, CultureInfo.InvariantCulture,
+                                       DateTimeStyles.None, out DateTime date))
+            {
+                // Return in format without leading zeros
+                return $"{date.Month}/{date.Day}/{date.Year}";
+            }
+
+            // If parsing fails, return original string
+            return dateStr;
+        }
+
         public static Dictionary<string,string> GetGarminAPICredentials()
         {
             return new FirebaseService().GetData<Dictionary<string, string>>("/GarminAPICredentials");
