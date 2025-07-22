@@ -75,13 +75,15 @@ public class Workout
                         else if (subStep.durationType == "TIME")
                         {
                             string timeStr = FormatTime(subStep.durationValue);
+                            string paceStr = FormatPace(subStep.targetValueHigh);
+
                             if (subStep.intensity == "REST")
                             {
                                 parts.Add($"{timeStr} rest");
                             }
                             else
                             {
-                                parts.Add($"{timeStr}");
+                                parts.Add($"{timeStr} @ {paceStr}");
                             }
                         }
                     }
