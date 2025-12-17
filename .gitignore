@@ -364,3 +364,5 @@ FodyWeavers.xsd
 
 
 ./GooseAPI/FireBaseConfig.cs
+
+FirebaseConfig.cs
