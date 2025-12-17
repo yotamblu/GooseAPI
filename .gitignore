@@ -363,6 +363,5 @@ MigrationBackup/
 FodyWeavers.xsd
 
 
-./GooseAPI/FireBaseConfig.cs
 
-FirebaseConfig.cs
+GooseAPI/FireBaseConfig.cs
