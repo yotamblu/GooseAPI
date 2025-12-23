@@ -10,17 +10,17 @@ namespace GooseAPI.Controllers
     {
         //date must be yyyy-MM-dd
         [HttpGet("byDate")]
-        public IActionResult Get([FromQuery] string apiKey, [FromQuery] string date)
+        public IActionResult Get([FromQuery] string apiKey, [FromQuery] string athleteName, [FromQuery] string date)
         {
             string userName = GooseAPI.GooseAPIUtils.FindUserNameByAPIKey(apiKey);
-            if (userName == "")
+            if (userName == "" || (userName != athleteName && !GooseAPIUtils.IsCoachingUser(userName,athleteName)))
             {
                 return BadRequest(new { message = "there is no user with this apiKey" });
 
             }
 
             FirebaseService service = new FirebaseService();
-            GarminData userGarminData = service.GetData<GarminData>($"/GarminData/{userName}");
+            GarminData userGarminData = service.GetData<GarminData>($"/GarminData/{athleteName}");
             if(userGarminData == null)
             {
                 return Unauthorized(new { message = "This user has not paired GooseNet with Garmin and is unable to view sleep data" });
@@ -32,17 +32,18 @@ namespace GooseAPI.Controllers
             }
 
             return Ok(sleepData);
-
+            
         }
 
 
         [HttpGet("feed")]
         public IActionResult GetFeed(
-      [FromQuery] string apiKey,
+      [FromQuery] string apiKey, 
+      [FromQuery] string athleteName,
       [FromQuery] string cursor = null)
         {
             string userName = GooseAPI.GooseAPIUtils.FindUserNameByAPIKey(apiKey);
-            if (string.IsNullOrEmpty(userName))
+            if (string.IsNullOrEmpty(userName) || (userName != athleteName && !GooseAPIUtils.IsCoachingUser(userName, athleteName)))
             {
                 return BadRequest(new { message = "there is no user with this apiKey" });
             }
@@ -50,7 +51,7 @@ namespace GooseAPI.Controllers
             FirebaseService service = new FirebaseService();
 
             GarminData userGarminData =
-                service.GetData<GarminData>($"/GarminData/{userName}");
+                service.GetData<GarminData>($"/GarminData/{athleteName}");
 
             if (userGarminData == null)
             {

@@ -1,4 +1,5 @@
 ﻿using Microsoft.AspNetCore.Mvc;
+using Newtonsoft.Json;
 using System.Linq;
 using System.Reflection.Metadata;
 
@@ -87,6 +88,47 @@ namespace GooseAPI.Controllers
 
             return Ok(new { message = "workout review inserted successfully!" });
         }
+
+
+
+
+        [HttpPost("/api/strength/addWorkout")]
+        public IActionResult AddStrengthWorkout([FromQuery] string apiKey, [FromBody] PlannedWorkoutData requestData )
+        {
+            string userName = GooseAPIUtils.FindUserNameByAPIKey(apiKey);
+            if(userName == null || GooseAPIUtils.GetUser(userName).Role != "coach")
+            {
+                return Unauthorized(new {message = "this apiKey is not fitting to this action"});
+            }
+
+
+            string id = GooseAPIUtils.GenerateShortHexId();
+            StrengthWorkout workoutData = JsonConvert.DeserializeObject<StrengthWorkout>(requestData.jsonBody);
+
+
+            if (requestData.isFlock)
+            {
+                List<string> flockAthletes = new FirebaseService().GetData<List<string>>($"/Flocks/{userName}/{requestData.targetName}/athletesUserNames");
+                workoutData.AthleteNames = flockAthletes;
+            }
+            else
+            {
+                workoutData.AthleteNames = new List<string>() { requestData.targetName};
+            }
+
+            StorePlannedStrengthWorkout(workoutData, id);
+
+            return Ok(new { message = "workout pushed successfully" ,workoutId = id});
+        }
+
+
+        [NonAction]
+
+        public void StorePlannedStrengthWorkout(StrengthWorkout workout,string id)
+        {
+            new FirebaseService().InsertData($"PlannedStrengthWorkouts/{id}",workout);
+        }
+
 
     }
 }
