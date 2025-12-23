@@ -55,49 +55,33 @@ namespace GooseAPI.Controllers
                 if (workout?.steps == null)
                     return "Workout format error";
 
-                var sb = new StringBuilder();
+                var parts = new List<string>();
 
-                foreach (var step in workout.steps)
+                foreach (var step in workout.steps.OrderBy(s => s.stepOrder))
                 {
-                    if (step.type != "WorkoutRepeatStep")
-                        continue;
-
-                    int repeatCount = step.repeatValue > 0 ? step.repeatValue : 1;
-                    sb.Append($"{repeatCount} * (");
-
-                    if (step.steps == null || step.steps.Count == 0)
+                    // REPEAT STEP
+                    if (step.type == "WorkoutRepeatStep")
                     {
-                        sb.AppendLine(")");
-                        continue;
+                        int repeatCount = step.repeatValue > 0 ? step.repeatValue : 1;
+
+                        if (step.steps == null || step.steps.Count == 0)
+                            continue;
+
+                        var innerParts = step.steps
+                            .OrderBy(s => s.stepOrder)
+                            .Select(FormatSingleStep);
+
+                        parts.Add($"{repeatCount} * ({string.Join(", ", innerParts)})");
                     }
-
-                    var parts = new List<string>();
-
-                    foreach (var sub in step.steps)
+                    // NORMAL STEP
+                    else if (step.type == "WorkoutStep")
                     {
-                        if (sub.durationType == "DISTANCE")
-                        {
-                            string dist = FormatDistance(sub.durationValue);
-                            if (sub.intensity == "REST")
-                                parts.Add($"{dist} rest");
-                            else
-                                parts.Add($"{dist} @ {FormatPace(sub.targetValueHigh)}");
-                        }
-                        else if (sub.durationType == "TIME")
-                        {
-                            string time = FormatTime(sub.durationValue);
-                            if (sub.intensity == "REST")
-                                parts.Add($"{time} rest");
-                            else
-                                parts.Add($"{time} @ {FormatPace(sub.targetValueHigh)}");
-                        }
+                        parts.Add(FormatSingleStep(step));
                     }
-
-                    sb.Append(string.Join(", ", parts));
-                    sb.AppendLine(")");
                 }
 
-                return sb.ToString().TrimEnd();
+                // SINGLE LINE OUTPUT
+                return string.Join(" | ", parts);
             }
             catch (Exception ex)
             {
@@ -106,14 +90,53 @@ namespace GooseAPI.Controllers
             }
         }
 
-        private static string FormatPace(double minPerKm)
+
+        private static string FormatPace(double metersPerSecond)
         {
-            if (minPerKm <= 0) return "--:--";
+            if (metersPerSecond <= 0)
+                return "--:--";
+
+            // m/s -> min/km
+            double minPerKm = (1000.0 / metersPerSecond) / 60.0;
+
             int min = (int)minPerKm;
             int sec = (int)Math.Round((minPerKm - min) * 60);
-            if (sec == 60) { min++; sec = 0; }
+
+            if (sec == 60)
+            {
+                min++;
+                sec = 0;
+            }
+
             return $"{min:D2}:{sec:D2}";
         }
+
+
+        private static string FormatSingleStep(WorkoutStep step)
+        {
+            if (step.durationType == "DISTANCE")
+            {
+                string dist = FormatDistance(step.durationValue);
+
+                if (step.intensity == "REST")
+                    return $"{dist} rest";
+
+                return $"{dist} @ {FormatPace(step.targetValueHigh)}";
+            }
+
+            if (step.durationType == "TIME")
+            {
+                string time = FormatTime(step.durationValue);
+
+                if (step.intensity == "REST")
+                    return $"{time} rest";
+
+                return $"{time} @ {FormatPace(step.targetValueHigh)}";
+            }
+
+            return "Unknown step";
+        }
+
 
         private static string FormatDistance(double meters)
         {
@@ -154,6 +177,80 @@ namespace GooseAPI.Controllers
 
         private const string workoutPushUrl = "https://apis.garmin.com/training-api/workout";
         private const string workoutscheduleUrl = "https://apis.garmin.com/training-api/schedule";
+
+
+        [HttpGet("/api/plannedWorkout/byDate")]
+        public IActionResult GetPlannedWorkoutsByDate(
+    [FromQuery] string apiKey,
+    [FromQuery] string athleteName,
+    [FromQuery] string date)
+        {
+            User requestingUser =
+                GooseAPIUtils.GetUser(
+                    GooseAPIUtils.FindUserNameByAPIKey(apiKey));
+
+            User athleteUser =
+                GooseAPIUtils.GetUser(athleteName);
+
+            if (requestingUser == null ||
+                athleteUser == null ||
+                athleteUser.Role != "athlete" ||
+                !(GooseAPIUtils.IsCoachingUser(requestingUser.UserName, athleteName)
+                  || requestingUser.UserName == athleteName))
+            {
+                return Unauthorized(new
+                {
+                    message = "you are not authorized to view workouts for this user"
+                });
+            }
+
+            FirebaseService firebaseService = new FirebaseService();
+            List<PlannedWorkout> plannedWorkouts = new List<PlannedWorkout>();
+
+            Dictionary<string, PlannedWorkout> allPlannedWorkouts =
+                firebaseService.GetData<Dictionary<string, PlannedWorkout>>("/PlannedWorkouts");
+
+            foreach (KeyValuePair<string, PlannedWorkout> kvp in allPlannedWorkouts)
+            {
+                PlannedWorkout currentWorkout = kvp.Value;
+
+                if (currentWorkout.AthleteNames.Contains(athleteName)
+                    && currentWorkout.Date == date)
+                {
+                    plannedWorkouts.Add(currentWorkout);
+                    currentWorkout.workoutId = kvp.Key;
+                }
+            }
+
+            return Ok(plannedWorkouts);
+        }
+
+
+        [HttpGet("/api/plannedWorkout/byId")]
+        public IActionResult GetPlannedWorkoutById([FromQuery] string id)
+        {
+            PlannedWorkout plannedWorkout =
+                new FirebaseService().GetData<PlannedWorkout>($"/PlannedWorkouts/{id}");
+
+            var response =
+                new FirebaseClient(FireBaseConfig.config)
+                    .Get($"/PlannedWorkoutsJSON/{id}");
+
+            string plannedWorkoutJSON = response.Body;
+
+            if (plannedWorkoutJSON == null)
+            {
+                return BadRequest(new { message = "no planned workout with this id was found" });
+            }
+
+            return Ok(new
+            {
+                worokutObject = plannedWorkout,
+                plannedWorkoutJson = FormatWorkoutJson(plannedWorkoutJSON)
+            });
+        }
+
+
 
         [HttpPost("/api/addWorkout")]
         public IActionResult AddWorkout([FromBody] PlannedWorkoutData workoutData, [FromQuery] string apikey)
