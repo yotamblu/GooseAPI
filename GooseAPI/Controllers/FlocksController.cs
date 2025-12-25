@@ -33,7 +33,36 @@ namespace GooseAPI.Controllers
 
         }
 
+        [HttpPost("removeAthlete")]
+        public IActionResult RemoveAthleteFromFlock([FromQuery]string apiKey ,  [FromBody] FlockAthleteRemovalData requestData)
+        {
+            string userName = GooseAPIUtils.FindUserNameByAPIKey(apiKey);
+            if (userName == null || GooseAPIUtils.GetUser(userName).Role != "coach")
+            {
+                return Unauthorized(new { message = "There is no coach with this API key" });
+            }
+            FirebaseService firebaseService = new FirebaseService();
+            string requestedFlockName = requestData.FlockName;
+            Flock requestedFlock = firebaseService.GetData<Flock>($"/Flocks/{userName}/{requestedFlockName}");
+            if (requestedFlock == null)
+            {
+                return BadRequest(new { message = "A flock with this name doesn't exist for this coach" });
+            }
+            string athleteUserName = requestData.AthleteName;
+            if (requestedFlock.athletesUserNames == null || !requestedFlock.athletesUserNames.Contains(athleteUserName))
+            {
 
+                return BadRequest(new { message = "This Athlete isn't in this FLOCK" });
+            }
+
+            requestedFlock.athletesUserNames.Remove(athleteUserName);
+
+            firebaseService.InsertData($"/Flocks/{userName}/{requestedFlockName}/athletesUserNames", requestedFlock.athletesUserNames);
+
+
+            return Ok(new {message = "Athlete was removed from the FLOCK successfully!"});
+
+        }
 
         [HttpGet("flockAthletes")]
         public IActionResult GetFlockAthletes([FromQuery] string apiKey,  [FromQuery] string flockName)
