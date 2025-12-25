@@ -110,6 +110,18 @@ namespace GooseAPI
         }
 
 
+        public static string NormalizeDateToMMDDYYYY(string input)
+        {
+            if (string.IsNullOrWhiteSpace(input))
+                return input;
+
+            if (!DateTime.TryParse(input, CultureInfo.InvariantCulture, DateTimeStyles.None, out DateTime date))
+                return input;
+
+            return date.ToString("MM/dd/yyyy", CultureInfo.InvariantCulture);
+        }
+
+
 
 
         private const string chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";

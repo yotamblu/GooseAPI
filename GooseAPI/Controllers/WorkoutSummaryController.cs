@@ -1,4 +1,5 @@
 ﻿using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.Formatters;
 using System.Globalization;
 using System.Reflection.Metadata;
 
@@ -11,12 +12,14 @@ namespace GooseAPI.Controllers
         [HttpGet]
         public IActionResult Get(string athleteName, string apiKey, string date)
         {
+            
             if(!IsAuthorized(athleteName,apiKey))return Unauthorized(new Message("You dont have the access to this data"));
             else
             {
+                FirebaseService service = new FirebaseService();
                 List<WorkoutSummary> workouts = new List<WorkoutSummary>(); 
                 foreach(KeyValuePair<string,Workout> kvp in 
-                    new FirebaseService().GetData<Dictionary<string, Workout>>($"Activities/{GooseAPIUtils.GetUserAccessToken(athleteName)}"))
+                    service.GetData<Dictionary<string, Workout>>($"Activities/{GooseAPIUtils.GetUserAccessToken(athleteName)}"))
                 {
                     if(kvp.Value.WorkoutDate.Replace(" ","") ==  date)
                     {
@@ -36,10 +39,22 @@ namespace GooseAPI.Controllers
                         }) ;
                     }
                 }
-                return Ok(workouts);
+
+                List<StrengthWorkout> strengthWorkouts = service.GetData<Dictionary<string,StrengthWorkout>>("/PlannedStrengthWorkouts")
+                    .Where(kvp => kvp.Value.AthleteNames.Contains(athleteName) 
+                    && kvp.Value.WorkoutDate.Equals(GooseAPIUtils.NormalizeDateToMMDDYYYY(date))
+                    && kvp.Value.WorkoutReviews != null && kvp.Value.WorkoutReviews.ContainsKey(athleteName)
+                    )
+                    .ToDictionary<string,StrengthWorkout>().Values.ToList();
+                
+                
+                return Ok(new {runningWorkouts = workouts,strengthWorkouts = strengthWorkouts});
             }
 
         }
+
+       
+
         [HttpGet("getWorkout")]
         public IActionResult GetWorkout([FromQuery] string userName,[FromQuery] string id)
         {
