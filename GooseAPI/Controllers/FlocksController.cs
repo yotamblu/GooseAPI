@@ -1,6 +1,5 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using RestSharp.Extensions;
-
 namespace GooseAPI.Controllers
 {
     [ApiController]
@@ -33,6 +32,28 @@ namespace GooseAPI.Controllers
 
 
         }
+
+
+
+        [HttpGet("flockAthletes")]
+        public IActionResult GetFlockAthletes([FromQuery] string apiKey,  [FromQuery] string flockName)
+        {
+            string userName = GooseAPIUtils.FindUserNameByAPIKey(apiKey);
+            if (userName == null || GooseAPIUtils.GetUser(userName).Role != "coach" )
+            {
+                return Unauthorized(new { message = "There is no coach with this API key" });
+            }
+
+            Flock requestedFlock = new FirebaseService().GetData<Flock>($"/Flocks/{userName}/{flockName}");
+            if(requestedFlock == null)
+            {
+                return BadRequest(new {message =  "A flock with this name doesn't exist for this coach"});
+            }
+
+            return Ok(requestedFlock.athletesUserNames);
+
+        }
+
 
         [HttpPost("createFlock")]
         public IActionResult CreateFlock([FromQuery] string apiKey, [FromQuery] string flockName) {

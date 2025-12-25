@@ -206,12 +206,26 @@ namespace GooseAPI.Controllers
 
             FirebaseService firebaseService = new FirebaseService();
             List<PlannedWorkout> plannedWorkouts = new List<PlannedWorkout>();
-            List<StrengthWorkout> plannedStrengthWorkouts = firebaseService.GetData<Dictionary<string, StrengthWorkout>>("/PlannedStrengthWorkouts")
-                    .Where(kvp => kvp.Value.AthleteNames.Contains(athleteName)
-                    && kvp.Value.WorkoutDate.Equals(GooseAPIUtils.NormalizeDateToMMDDYYYY(date))
-                    
-                    )
-                    .ToDictionary<string, StrengthWorkout>().Values.ToList();
+            var strengthDict =
+     firebaseService.GetData<Dictionary<string, StrengthWorkout>>("/PlannedStrengthWorkouts")
+     ?? new Dictionary<string, StrengthWorkout>();
+
+            string normalizedDate;
+            try
+            {
+                normalizedDate = GooseAPIUtils.NormalizeDateToMMDDYYYY(date);
+            }
+            catch
+            {
+                return BadRequest(new { message = $"Bad date value: '{date}'" });
+            }
+
+            var plannedStrengthWorkouts = strengthDict
+                .Where(kvp =>
+                    kvp.Value?.AthleteNames?.Contains(athleteName) == true &&
+                    string.Equals(kvp.Value?.WorkoutDate, normalizedDate, StringComparison.Ordinal))
+                .Select(kvp => kvp.Value)
+                .ToList();
             Dictionary<string, PlannedWorkout> allPlannedWorkouts =
                 firebaseService.GetData<Dictionary<string, PlannedWorkout>>("/PlannedWorkouts");
 
