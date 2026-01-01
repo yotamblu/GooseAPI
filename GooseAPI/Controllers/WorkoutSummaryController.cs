@@ -40,14 +40,21 @@ namespace GooseAPI.Controllers
                     }
                 }
 
-                List<StrengthWorkout> strengthWorkouts = service.GetData<Dictionary<string,StrengthWorkout>>("/PlannedStrengthWorkouts")
-                    .Where(kvp => kvp.Value.AthleteNames.Contains(athleteName) 
+               
+
+                Dictionary<string, StrengthWorkout> strengthWorkoutsDict = service.GetData<Dictionary<string, StrengthWorkout>>("/PlannedStrengthWorkouts")
+                    .Where(kvp => kvp.Value.AthleteNames.Contains(athleteName)
                     && kvp.Value.WorkoutDate.Equals(GooseAPIUtils.NormalizeDateToMMDDYYYY(date))
                     && kvp.Value.WorkoutReviews != null && kvp.Value.WorkoutReviews.ContainsKey(athleteName)
                     )
-                    .ToDictionary<string,StrengthWorkout>().Values.ToList();
-                
-                
+                    .ToDictionary<string, StrengthWorkout>();
+
+                foreach(KeyValuePair<string,StrengthWorkout> kvp in strengthWorkoutsDict)
+                {
+                    kvp.Value.WorkoutId = kvp.Key;
+                }
+                List<StrengthWorkout> strengthWorkouts = strengthWorkoutsDict.Values.ToList();
+
                 return Ok(new {runningWorkouts = workouts,strengthWorkouts = strengthWorkouts});
             }
 

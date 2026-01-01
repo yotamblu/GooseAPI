@@ -11,7 +11,7 @@
         public List<string> AthleteNames { get; set; }
 
         public Dictionary<string, StrengthWorkoutReview> WorkoutReviews { get; set; }
-
+        public string WorkoutId { get; set; }
 
     }
 }

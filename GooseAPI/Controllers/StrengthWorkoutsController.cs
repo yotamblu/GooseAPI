@@ -9,7 +9,7 @@ namespace GooseAPI.Controllers
     public class StrengthWorkoutsController : Controller
     {
         [HttpGet("/api/strength/reviews")]
-        public IActionResult GetStrengthWorkoutReview([FromQuery] string apiKey,[FromQuery] string workoutId)
+        public IActionResult GetStrengthWorkoutReview([FromQuery] string apiKey, [FromQuery] string workoutId)
         {
             FirebaseService firebaseService = new FirebaseService();
             //check validation
@@ -20,18 +20,18 @@ namespace GooseAPI.Controllers
             }
             User requestingUser = GooseAPIUtils.GetUser(requestingUserName);
             StrengthWorkout requestedWorkout = firebaseService.GetData<StrengthWorkout>($"/PlannedStrengthWorkouts/{workoutId}");
-            if(requestingUser == null)
+            if (requestingUser == null)
             {
                 return BadRequest(new { message = "there is no workout with this workout id" });
             }
-            if((requestingUser.Role == "coach" && requestedWorkout.CoachName != requestingUserName ) ||
+            if ((requestingUser.Role == "coach" && requestedWorkout.CoachName != requestingUserName) ||
                 (requestingUser.Role == "athlete" && !requestedWorkout.AthleteNames.Contains(requestingUserName)))
             {
                 return BadRequest(new { message = "you have no access to this data" });
             }
-            Dictionary<string,StrengthWorkoutReview> reviews = new Dictionary<string,StrengthWorkoutReview>();
+            Dictionary<string, StrengthWorkoutReview> reviews = new Dictionary<string, StrengthWorkoutReview>();
 
-            if (requestedWorkout.WorkoutReviews != null )
+            if (requestedWorkout.WorkoutReviews != null)
             {
                 if (requestingUser.Role == "athlete" && requestedWorkout.WorkoutReviews.ContainsKey(requestingUserName))
                 {
@@ -50,7 +50,7 @@ namespace GooseAPI.Controllers
             {
                 return Ok(new Dictionary<object, object>());
             }
-           
+
         }
 
         [HttpPost("/api/strength/reviews")]
@@ -93,19 +93,19 @@ namespace GooseAPI.Controllers
 
 
         [HttpPost("/api/strength/addWorkout")]
-        public IActionResult AddStrengthWorkout([FromQuery] string apiKey, [FromBody] PlannedWorkoutData requestData )
+        public IActionResult AddStrengthWorkout([FromQuery] string apiKey, [FromBody] PlannedWorkoutData requestData)
         {
             string userName = GooseAPIUtils.FindUserNameByAPIKey(apiKey);
-            if(userName == null || GooseAPIUtils.GetUser(userName).Role != "coach")
+            if (userName == null || GooseAPIUtils.GetUser(userName).Role != "coach")
             {
-                return Unauthorized(new {message = "this apiKey is not fitting to this action"});
+                return Unauthorized(new { message = "this apiKey is not fitting to this action" });
             }
 
 
             string id = GooseAPIUtils.GenerateShortHexId();
             StrengthWorkout workoutData = JsonConvert.DeserializeObject<StrengthWorkout>(requestData.jsonBody);
 
-
+            workoutData.CoachName = userName;
             if (requestData.isFlock)
             {
                 List<string> flockAthletes = new FirebaseService().GetData<List<string>>($"/Flocks/{userName}/{requestData.targetName}/athletesUserNames");
@@ -113,13 +113,35 @@ namespace GooseAPI.Controllers
             }
             else
             {
-                workoutData.AthleteNames = new List<string>() { requestData.targetName};
+                workoutData.AthleteNames = new List<string>() { requestData.targetName };
             }
 
             StorePlannedStrengthWorkout(workoutData, id);
 
-            return Ok(new { message = "workout pushed successfully" ,workoutId = id});
+            return Ok(new { message = "workout pushed successfully", workoutId = id });
         }
+
+
+
+        [HttpGet("/api/strength/workout")]
+
+        public IActionResult GetStrengthWorkoutById([FromQuery] string id) {
+            FirebaseService firebaseService = new FirebaseService();
+
+            StrengthWorkout workout = firebaseService.GetData<StrengthWorkout>($"/PlannedStrengthWorkouts/{id}");
+            if(workout == null)
+            {
+                return Unauthorized(
+                    new {message = "There is no Strength Workout With this ID"}
+                    );
+            }
+
+
+            return Ok(workout);
+
+        
+        }
+
 
 
         [NonAction]
