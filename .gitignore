@@ -365,3 +365,4 @@ FodyWeavers.xsd
 
 
 GooseAPI/FireBaseConfig.cs
+.env
