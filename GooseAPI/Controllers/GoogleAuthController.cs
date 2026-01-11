@@ -1,11 +1,13 @@
 ﻿using Google.Apis.Auth;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Configuration;
+using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Net.Http;
+using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
-using System.Collections.Generic;
-using Newtonsoft.Json.Linq;
 
 namespace GooseAPI.Controllers
 {
@@ -21,37 +23,55 @@ namespace GooseAPI.Controllers
             _httpClient = new HttpClient();
         }
 
-        // STEP 1: Redirect user to Google
         [HttpGet("auth/google")]
         public IActionResult GoogleLogin([FromQuery] string role)
         {
             string clientId = _config["GOOGLE_CLIENT_ID"];
-            string redirectUri = _config["GOOGLE_REDIRECT_URI"] + $"/{role}";
-            Console.WriteLine(redirectUri);
+            string redirectUri = _config["GOOGLE_REDIRECT_URI"];
+
+            string origin =
+                Request.Headers["Origin"].FirstOrDefault()
+                ?? Request.Headers["Referer"].FirstOrDefault()
+                ?? $"{Request.Scheme}://{Request.Host}";
+
+            var statePayload = new Dictionary<string, string>
+            {
+                { "origin", origin.TrimEnd('/') },
+                { "role", role ?? "" },
+                { "ts", DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString() }
+            };
+
+            string stateJson = JsonSerializer.Serialize(statePayload);
+            string state = Base64UrlEncode(Encoding.UTF8.GetBytes(stateJson));
+
             string authUrl =
                 "https://accounts.google.com/o/oauth2/v2/auth" +
-                "?client_id=" + clientId +
-                "&redirect_uri=" + redirectUri +
+                "?client_id=" + Uri.EscapeDataString(clientId) +
+                "&redirect_uri=" + Uri.EscapeDataString(redirectUri) +
                 "&response_type=code" +
-                "&scope=openid%20email%20profile";
+                "&scope=" + Uri.EscapeDataString("openid email profile") +
+                "&state=" + Uri.EscapeDataString(state);
 
             return Redirect(authUrl);
         }
 
-        // STEP 2: Google redirects back here
-        [HttpGet("auth/google/callback/{role}")]
-        public async Task<IActionResult> GoogleCallback([FromQuery] string code, [FromRoute] string role)
+        [HttpGet("auth/google/callback")]
+        public async Task<IActionResult> GoogleCallback([FromQuery] string code, [FromQuery] string state)
         {
-            FirebaseService firebaseService = new FirebaseService();
-            if (string.IsNullOrEmpty(code))
-                return BadRequest("Missing authorization code");
+            if (string.IsNullOrWhiteSpace(code) || string.IsNullOrWhiteSpace(state))
+                return BadRequest();
+
+            var decodedState = JsonSerializer.Deserialize<Dictionary<string, string>>(
+                Encoding.UTF8.GetString(Base64UrlDecode(state))
+            );
+
+            string origin = (decodedState.TryGetValue("origin", out var o) ? o : "").TrimEnd('/');
+            string role = decodedState.TryGetValue("role", out var r) ? r : "";
 
             string clientId = _config["GOOGLE_CLIENT_ID"];
             string clientSecret = _config["GOOGLE_CLIENT_SECRET"];
-            string redirectUri = _config["GOOGLE_REDIRECT_URI"] + $"/{role}";
-            string redirectUrl = _config["GOOGLE_SUCCESS_URL"] + "?jwt=";
+            string redirectUri = _config["GOOGLE_REDIRECT_URI"];
 
-            // Exchange authorization code for tokens
             var tokenResponse = await _httpClient.PostAsync(
                 "https://oauth2.googleapis.com/token",
                 new FormUrlEncodedContent(new Dictionary<string, string>
@@ -65,12 +85,11 @@ namespace GooseAPI.Controllers
             );
 
             if (!tokenResponse.IsSuccessStatusCode)
-                return Unauthorized(tokenResponse);
+                return Unauthorized();
 
             var tokenJson = await tokenResponse.Content.ReadAsStringAsync();
             var token = JsonSerializer.Deserialize<GoogleTokenResponse>(tokenJson);
 
-            // Validate Google ID token
             var payload = await GoogleJsonWebSignature.ValidateAsync(
                 token.id_token,
                 new GoogleJsonWebSignature.ValidationSettings
@@ -79,39 +98,28 @@ namespace GooseAPI.Controllers
                 }
             );
 
-            //check if already signed up
-            User existingUser =  firebaseService
-            .GetData<Dictionary<string, User>>("/Users")
-            .FirstOrDefault(kvp => kvp.Value.GoogleSubject == payload.Subject)
-            .Value;
-            if(existingUser != null)
+            FirebaseService firebaseService = new FirebaseService();
+
+            User existingUser = firebaseService
+                .GetData<Dictionary<string, User>>("/Users")
+                .FirstOrDefault(kvp => kvp.Value.GoogleSubject == payload.Subject)
+                .Value;
+
+            if (existingUser != null)
             {
-                //log user in
-                string jwtToken = GooseAPIUtils.GenerateJwtToken(existingUser,_config);
-                return Redirect(redirectUrl + jwtToken);
+                string jwtExisting = GooseAPIUtils.GenerateJwtToken(existingUser, _config);
+                return Redirect(origin + "/login/google/success?jwt=" + Uri.EscapeDataString(jwtExisting));
             }
 
-
-            //prevent doubles in the DB by adding a number for duplicate UserNames
-            string requestedUserName = payload.Name.Replace(" ","");
+            string requestedUserName = payload.Name.Replace(" ", "");
             string fixedUserName = requestedUserName;
-            bool userNameValidated = false;
-            int userNameAddition = 2;
-            while (!userNameValidated)
+            int userNameAddition = 1;
+
+            while (firebaseService.GetData<User>($"/Users/{fixedUserName}") != null)
             {
-                if (firebaseService.GetData<User>($"/Users/{requestedUserName}") != null)
-                {
-                    fixedUserName = requestedUserName + (++userNameAddition).ToString();
-                }
-                else
-                {
-                    userNameValidated = true;
-                }
+                fixedUserName = requestedUserName + (++userNameAddition).ToString();
             }
 
-
-
-            //create user
             User userData = new User
             {
                 UserName = fixedUserName,
@@ -123,27 +131,36 @@ namespace GooseAPI.Controllers
                 GoogleSubject = payload.Subject,
                 ProfilePicString = payload.Picture
             };
-            if (userData.Role == "coach")
+
+            if (role == "coach")
             {
                 firebaseService.InsertData($"/CoachCodes/{userData.UserName}", new CoachData
                 {
-
-
                     CoachId = GooseAPIUtils.GenerateShortHexId(),
                     CoachUserName = userData.UserName
-
                 });
             }
 
             firebaseService.InsertData($"Users/{userData.UserName}", userData);
 
-            //log user in
             string jwt = GooseAPIUtils.GenerateJwtToken(userData, _config);
-            return Redirect(redirectUrl + jwt);
+            return Redirect(origin + "/auth/google/success?jwt=" + Uri.EscapeDataString(jwt));
         }
 
-      
-    }
+        private static string Base64UrlEncode(byte[] data)
+        {
+            return Convert.ToBase64String(data).TrimEnd('=').Replace('+', '-').Replace('/', '_');
+        }
 
-    
+        private static byte[] Base64UrlDecode(string input)
+        {
+            string s = input.Replace('-', '+').Replace('_', '/');
+            switch (s.Length % 4)
+            {
+                case 2: s += "=="; break;
+                case 3: s += "="; break;
+            }
+            return Convert.FromBase64String(s);
+        }
+    }
 }
