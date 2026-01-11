@@ -10,6 +10,6 @@
             public string ProfilePicString { get; set; }
             public string DefualtPicString { get; set; }
             public string ApiKey {  get; set; }
-        
+            public string GoogleSubject { get; set; }
     }
 }

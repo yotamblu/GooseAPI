@@ -6,11 +6,16 @@ using static System.Net.Mime.MediaTypeNames;
 using System.Drawing.Imaging;
 using System.Runtime.InteropServices;
 using System.Globalization;
+using Microsoft.IdentityModel.Tokens;
+using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
 
 namespace GooseAPI
 {
     public class GooseAPIUtils
     {
+
+      
         public static string FindUserNameByAPIKey(string apiKey)
         {
             foreach (KeyValuePair<string, User> kvp in new FirebaseService().GetData<Dictionary<string,User>>("Users"))
@@ -80,6 +85,46 @@ namespace GooseAPI
             }
         }
 
+
+
+        public static string GenerateJwtToken(User user, IConfiguration _config)
+        {
+            var claims = new List<Claim>
+            {
+                // 🔴 This becomes User.Identity.Name
+                new Claim(ClaimTypes.NameIdentifier, user.UserName),
+
+                // Optional JWT standard
+                new Claim(JwtRegisteredClaimNames.Sub, user.UserName),
+
+                new Claim("apiKey", user.ApiKey),
+                new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
+                new Claim(
+                    JwtRegisteredClaimNames.Iat,
+                    DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString(),
+                    ClaimValueTypes.Integer64
+                )
+            };
+
+            var signingKey = new SymmetricSecurityKey(
+                Encoding.UTF8.GetBytes(_config["Jwt:Secret"]!)
+            )
+            {
+                KeyId = "goosenet-default"
+            };
+
+            var creds = new SigningCredentials(signingKey, SecurityAlgorithms.HmacSha256);
+
+            var token = new JwtSecurityToken(
+                issuer: _config["Jwt:Issuer"],
+                audience: _config["Jwt:Audience"],
+                claims: claims,
+                expires: DateTime.UtcNow.AddDays(7),
+                signingCredentials: creds
+            );
+
+            return new JwtSecurityTokenHandler().WriteToken(token);
+        }
 
         public static GarminData GetUserAccessTokenAndSecret(string userName)
         {

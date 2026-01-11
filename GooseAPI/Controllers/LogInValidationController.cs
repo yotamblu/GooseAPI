@@ -13,7 +13,7 @@ namespace GooseAPI.Controllers
     {
         private readonly IConfiguration _config;
 
-        public UserAuthController(IConfiguration config)
+        public  UserAuthController(IConfiguration config)
         {
             _config = config;
         }
@@ -31,7 +31,7 @@ namespace GooseAPI.Controllers
                 return Unauthorized(new Message("The User Credentials Supplied Were Wrong!"));
             }
 
-            string token = GenerateJwtToken(requestedUser);
+            string token = GooseAPIUtils.GenerateJwtToken(requestedUser,_config);
 
             // 🔁 BACKWARD-COMPATIBLE RESPONSE
             return Ok(new
@@ -69,44 +69,6 @@ namespace GooseAPI.Controllers
             return Ok(user);
         }
 
-        // 🔑 JWT CREATION (WITH KeyId)
-        private string GenerateJwtToken(User user)
-        {
-            var claims = new List<Claim>
-            {
-                // 🔴 This becomes User.Identity.Name
-                new Claim(ClaimTypes.NameIdentifier, user.UserName),
-
-                // Optional JWT standard
-                new Claim(JwtRegisteredClaimNames.Sub, user.UserName),
-
-                new Claim("apiKey", user.ApiKey),
-                new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
-                new Claim(
-                    JwtRegisteredClaimNames.Iat,
-                    DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString(),
-                    ClaimValueTypes.Integer64
-                )
-            };
-
-            var signingKey = new SymmetricSecurityKey(
-                Encoding.UTF8.GetBytes(_config["Jwt:Secret"]!)
-            )
-            {
-                KeyId = "goosenet-default"
-            };
-
-            var creds = new SigningCredentials(signingKey, SecurityAlgorithms.HmacSha256);
-
-            var token = new JwtSecurityToken(
-                issuer: _config["Jwt:Issuer"],
-                audience: _config["Jwt:Audience"],
-                claims: claims,
-                expires: DateTime.UtcNow.AddDays(7),
-                signingCredentials: creds
-            );
-
-            return new JwtSecurityTokenHandler().WriteToken(token);
-        }
+      
     }
 }
