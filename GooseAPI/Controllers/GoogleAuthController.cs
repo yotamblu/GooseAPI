@@ -144,7 +144,7 @@ namespace GooseAPI.Controllers
             firebaseService.InsertData($"Users/{userData.UserName}", userData);
 
             string jwt = GooseAPIUtils.GenerateJwtToken(userData, _config);
-            return Redirect(origin + "/auth/google/success?jwt=" + Uri.EscapeDataString(jwt));
+            return Redirect(origin + "/login/google/success?jwt=" + Uri.EscapeDataString(jwt));
         }
 
         private static string Base64UrlEncode(byte[] data)
