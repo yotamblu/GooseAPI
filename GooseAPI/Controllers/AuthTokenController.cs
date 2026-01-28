@@ -1,15 +1,25 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Http.Metadata;
+using Microsoft.AspNetCore.Mvc;
 using System.Collections.Generic;
+using System.Data;
 
 namespace GooseAPI.Controllers
 {
   
     public class AuthTokenController : ControllerBase
     {
+        private readonly IConfiguration _config;
+        private readonly HttpClient _httpClient;
+
+        public AuthTokenController(IConfiguration config)
+        {
+            _config = config;
+            _httpClient = new HttpClient();
+        }
 
 
         [HttpGet("/api/request-token")]
-        public IActionResult GetTokenAndSecret()
+        public IActionResult GetTokenAndSecret([FromQuery] string? apiKey = null)
         {
             var creds = GooseAPIUtils.GetGarminAPICredentials(); // expects ConsumerKey, ConsumerSecret
 
@@ -28,6 +38,17 @@ namespace GooseAPI.Controllers
 
             if (!values.ContainsKey("oauth_token") || !values.ContainsKey("oauth_token_secret"))
                 return BadRequest("Invalid response from Garmin: " + response);
+
+            if (!string.IsNullOrEmpty(apiKey))
+            {
+                string oauthStateToken = CreateOauthStateToken(apiKey);
+                return Ok(new
+                {
+                    stateToken = oauthStateToken,
+                    oauth_token = values["oauth_token"],
+                    oauth_token_secret = values["oauth_token_secret"]
+                });
+            }
 
             return Ok(new
             {
@@ -49,7 +70,7 @@ namespace GooseAPI.Controllers
             Console.WriteLine($"token_secret: '{token_secret}'");
 
             var creds = GooseAPIUtils.GetGarminAPICredentials();
-            var baseUrl = "https://connectapi.garmin.com";
+            var baseUrl = "https://connectapi.garmin.com"; 
             var endpoint = "/oauth-service/oauth/access_token";
             var fullUrl = baseUrl + endpoint;
 
@@ -87,6 +108,19 @@ namespace GooseAPI.Controllers
 
 
 
+
+        [HttpGet("/api/auth/stateToken")]
+        public IActionResult GetJwtFromStateToken([FromQuery] string token)
+        {
+            string jwt = ExchangeStateTokenForJwt(token);
+            if(jwt == null)
+            {
+                return Unauthorized(new { message = "the state token is either expired or doesnt exist" });
+            }
+            return Ok(new {token = jwt });
+        }
+
+
         private Dictionary<string, string> ParseQueryString(string input)
         {
             var dict = new Dictionary<string, string>();
@@ -102,6 +136,42 @@ namespace GooseAPI.Controllers
             return dict;
         }
 
+        private string CreateOauthStateToken(string apiKey)
+        {
+            FirebaseService firebaseService = new FirebaseService();
+            User userData = GooseAPIUtils.GetUser(GooseAPIUtils.FindUserNameByAPIKey(apiKey));
+            string jwt = GooseAPIUtils.GenerateJwtToken(userData, _config);
+            string tokenExpiration = DateTime.Now.AddMinutes(10).ToString();
+            string stateToken = GooseAPIUtils.GenerateShortHexId();
+            firebaseService.InsertData($"/OAuthStateTokens/{stateToken}", new StateTokenData
+            {
+                Token = stateToken,
+                ExpiresAt = tokenExpiration,
+                Jwt = jwt
+            });
+
+
+            return stateToken;
+        }
+
+        private string ExchangeStateTokenForJwt(string stateToken)
+        {
+            FirebaseService firebaseService = new FirebaseService();
+            string path = $"/OAuthStateTokens/{stateToken}";
+            StateTokenData data = firebaseService.GetData<StateTokenData>(path);
+
+            if (data == null)
+                return null;
+
+            if (DateTime.Parse(data.ExpiresAt) <= DateTime.Now)
+            {
+                firebaseService.DeleteData(path);
+                return null;
+            }
+
+            firebaseService.DeleteData(path);
+            return data.Jwt;
+        }
 
     }
 }
