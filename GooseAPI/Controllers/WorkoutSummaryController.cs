@@ -190,6 +190,8 @@ namespace GooseAPI.Controllers
                     "/PlannedStrengthWorkouts"
                 ) ?? new Dictionary<string, StrengthWorkout>();
 
+            
+
             List<(StrengthWorkout sw, DateTime d)> strengthValid = new();
 
             foreach (StrengthWorkout sw in allStrength.Values)
@@ -211,7 +213,14 @@ namespace GooseAPI.Controllers
 
                 if (strengthCursorDate != null && d >= strengthCursorDate.Value)
                     continue;
-
+                if(sw.WorkoutId == null)
+                {
+                    sw.WorkoutId = allStrength
+               .Where(kvp => ReferenceEquals(kvp.Value, sw))
+               .Select(kvp => kvp.Value)
+               .FirstOrDefault().WorkoutId;
+                }
+               
                 strengthValid.Add((sw, d));
             }
 

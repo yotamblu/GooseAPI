@@ -115,7 +115,7 @@ namespace GooseAPI.Controllers
             {
                 workoutData.AthleteNames = new List<string>() { requestData.targetName };
             }
-
+            workoutData.WorkoutId = id;
             StorePlannedStrengthWorkout(workoutData, id);
 
             return Ok(new { message = "workout pushed successfully", workoutId = id });
