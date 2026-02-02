@@ -194,6 +194,9 @@ namespace GooseAPI.Controllers
 
             foreach (StrengthWorkout sw in allStrength.Values)
             {
+                if (GooseAPIUtils.GetUser(caller).Role == "coach" && sw.CoachName != caller)
+                    continue;
+
                 if (sw?.WorkoutReviews == null)
                     continue;
 
