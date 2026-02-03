@@ -4,6 +4,7 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
@@ -276,6 +277,127 @@ namespace GooseAPI.Controllers
             });
         }
 
+        [HttpGet("/api/planned/feed")]
+        public IActionResult GetPlannedWorkoutFeed(
+    [FromQuery] string apiKey,
+    [FromQuery] string athleteName,
+    [FromQuery] string runningCursor = null,
+    [FromQuery] string strengthCursor = null)
+        {
+            string caller = GooseAPIUtils.FindUserNameByAPIKey(apiKey);
+
+            if (string.IsNullOrEmpty(caller))
+                return BadRequest(new { message = "there is no user with this apiKey" });
+
+            if (string.IsNullOrEmpty(athleteName))
+                return BadRequest(new { message = "athleteName is required" });
+
+            bool allowed =
+                caller == athleteName ||
+                GooseAPIUtils.IsCoachingUser(caller, athleteName);
+
+            if (!allowed)
+                return Unauthorized(new { message = "You are not allowed to access this athlete's workouts" });
+
+            FirebaseService firebase = new FirebaseService();
+
+            DateTime? runningCursorDate = ParseCursorOrNull(runningCursor);
+            DateTime? strengthCursorDate = ParseCursorOrNull(strengthCursor);
+
+            const int pageSize = 10;
+
+            Dictionary<string, PlannedWorkout> allPlanned =
+                firebase.GetData<Dictionary<string, PlannedWorkout>>("/PlannedWorkouts")
+                ?? new Dictionary<string, PlannedWorkout>();
+
+            List<(PlannedWorkout w, DateTime d)> runningValid = new();
+
+            foreach (var kvp in allPlanned)
+            {
+                PlannedWorkout pw = kvp.Value;
+
+                if (pw?.AthleteNames == null || !pw.AthleteNames.Contains(athleteName))
+                    continue;
+
+                if (GooseAPIUtils.GetUser(caller).Role == "coach" && pw.CoachName != caller)
+                    continue;
+
+                if (!TryParseWorkoutDate(pw.Date, out DateTime d))
+                    continue;
+
+                d = d.Date;
+
+                if (runningCursorDate != null && d >= runningCursorDate.Value)
+                    continue;
+
+                pw.workoutId = kvp.Key;
+                runningValid.Add((pw, d));
+            }
+
+            List<PlannedWorkout> runningWorkouts = runningValid
+                .OrderByDescending(x => x.d)
+                .Take(pageSize)
+                .Select(x => x.w)
+                .ToList();
+
+            DateTime? nextRunningCursor =
+                runningWorkouts.Count > 0
+                    ? runningValid
+                        .OrderByDescending(x => x.d)
+                        .Take(pageSize)
+                        .Last().d
+                    : null;
+
+            Dictionary<string, StrengthWorkout> allStrength =
+                firebase.GetData<Dictionary<string, StrengthWorkout>>("/PlannedStrengthWorkouts")
+                ?? new Dictionary<string, StrengthWorkout>();
+
+            List<(StrengthWorkout sw, DateTime d)> strengthValid = new();
+
+            foreach (var kvp in allStrength)
+            {
+                StrengthWorkout sw = kvp.Value;
+
+                if (sw?.AthleteNames == null || !sw.AthleteNames.Contains(athleteName))
+                    continue;
+
+                if (GooseAPIUtils.GetUser(caller).Role == "coach" && sw.CoachName != caller)
+                    continue;
+
+                if (!TryParseWorkoutDate(sw.WorkoutDate, out DateTime d))
+                    continue;
+
+                d = d.Date;
+
+                if (strengthCursorDate != null && d >= strengthCursorDate.Value)
+                    continue;
+
+                sw.WorkoutId = kvp.Key;
+                strengthValid.Add((sw, d));
+            }
+
+            List<StrengthWorkout> strengthWorkouts = strengthValid
+                .OrderByDescending(x => x.d)
+                .Take(pageSize)
+                .Select(x => x.sw)
+                .ToList();
+
+            DateTime? nextStrengthCursor =
+                strengthWorkouts.Count > 0
+                    ? strengthValid
+                        .OrderByDescending(x => x.d)
+                        .Take(pageSize)
+                        .Last().d
+                    : null;
+
+            return Ok(new
+            {
+                runningWorkouts = runningWorkouts,
+                strengthWorkouts = strengthWorkouts,
+                runningNextCursor = nextRunningCursor?.ToString("MM/dd/yyyy"),
+                strengthNextCursor = nextStrengthCursor?.ToString("MM/dd/yyyy")
+            });
+        }
 
 
         [HttpPost("/api/addWorkout")]
@@ -344,6 +466,41 @@ namespace GooseAPI.Controllers
             return Ok(new { message = "workout pushed successfully" });
         }
 
+        //======================DATE PARSING==================
+        private static bool TryParseWorkoutDate(string date, out DateTime result)
+        {
+            result = default;
+
+            if (string.IsNullOrWhiteSpace(date))
+                return false;
+
+            string[] formats =
+            {
+        "M/d/yyyy",
+        "M/dd/yyyy",
+        "MM/d/yyyy",
+        "MM/dd/yyyy"
+    };
+
+            return DateTime.TryParseExact(
+                date.Trim(),
+                formats,
+                CultureInfo.InvariantCulture,
+                DateTimeStyles.None,
+                out result
+            );
+        }
+
+        private static DateTime? ParseCursorOrNull(string cursor)
+        {
+            if (string.IsNullOrWhiteSpace(cursor))
+                return null;
+
+            if (!TryParseWorkoutDate(cursor, out DateTime d))
+                throw new ArgumentException("Invalid cursor date");
+
+            return d.Date;
+        }
         // ===================== STORAGE =====================
 
         private void StorePlannedWorkout(
