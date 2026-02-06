@@ -13,7 +13,7 @@ namespace GooseAPI.Controllers
         public IActionResult Get([FromQuery] string apiKey, [FromQuery] string athleteName, [FromQuery] string date)
         {
             string userName = GooseAPI.GooseAPIUtils.FindUserNameByAPIKey(apiKey);
-            if (userName == "" || (userName != athleteName && !GooseAPIUtils.IsCoachingUser(userName,athleteName)))
+            if (userName == "" || (GooseAPIUtils.GetUser(userName).Role != "coach" && userName != athleteName) ||  (userName != athleteName && !GooseAPIUtils.IsCoachingUser(userName, athleteName) && GooseAPIUtils.GetUser(userName).Role == "coach"))
             {
                 return BadRequest(new { message = "there is no user with this apiKey" });
 
@@ -43,7 +43,7 @@ namespace GooseAPI.Controllers
       [FromQuery] string cursor = null)
         {
             string userName = GooseAPI.GooseAPIUtils.FindUserNameByAPIKey(apiKey);
-            if (string.IsNullOrEmpty(userName) || (userName != athleteName && !GooseAPIUtils.IsCoachingUser(userName, athleteName)))
+            if (string.IsNullOrEmpty(userName) || (GooseAPIUtils.GetUser(userName).Role != "coach" && userName != athleteName ) || (userName != athleteName && !GooseAPIUtils.IsCoachingUser(userName, athleteName) && GooseAPIUtils.GetUser(userName).Role == "coach"))
             {
                 return BadRequest(new { message = "there is no user with this apiKey" });
             }
