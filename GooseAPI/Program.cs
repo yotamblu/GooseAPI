@@ -10,23 +10,40 @@ namespace GooseAPI
     {
         public static void Main(string[] args)
         {
-            // 🔴 Load .env BEFORE anything else
-            DotNetEnv.Env.Load(Path.Combine(AppContext.BaseDirectory, ".env"));
+            AppContext.SetSwitch("System.Drawing.EnableUnixSupport", true);
+            // 🔴 1. Load .env BEFORE anything else
+            // If running via systemd, this looks in the WorkingDirectory
+            Env.Load();
+
             var builder = WebApplication.CreateBuilder(args);
 
-            // 🔑 Shared signing key WITH KeyId (THIS FIXES IDX10503)
+            // 🛡️ 2. FAIL-SAFE: Verify JWT configuration exists
+            var jwtSecret = builder.Configuration["Jwt:Secret"];
+            if (string.IsNullOrEmpty(jwtSecret))
+            {
+                Console.WriteLine("**************************************************");
+                Console.WriteLine("CRITICAL ERROR: 'Jwt:Secret' is missing!");
+                Console.WriteLine("Check if your .env file exists in the root folder.");
+                Console.WriteLine("Current Directory: " + Directory.GetCurrentDirectory());
+                Console.WriteLine("**************************************************");
+                // Stop the app immediately so you don't chase ghost bugs
+                Environment.Exit(1);
+            }
+
+            // 🔑 3. Shared signing key WITH KeyId (Fixed IDX10503)
             var signingKey = new SymmetricSecurityKey(
-                Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Secret"]!)
+                Encoding.UTF8.GetBytes(jwtSecret)
             )
             {
                 KeyId = "goosenet-default"
             };
 
+            // 🏗️ 4. Configure Services
             builder.Services
                 .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
                 .AddJwtBearer(options =>
                 {
-                    // 🔴 Required for .NET 8 compatibility
+                    // Required for .NET 8 compatibility
                     options.UseSecurityTokenValidators = true;
 
                     options.TokenValidationParameters = new TokenValidationParameters
@@ -37,26 +54,21 @@ namespace GooseAPI
                         ValidateIssuerSigningKey = true,
 
                         ValidIssuer = builder.Configuration["Jwt:Issuer"],
-                        ValidAudiences = new[]
-                        {
-                            builder.Configuration["Jwt:Audience"]
-                        },
+                        ValidAudiences = new[] { builder.Configuration["Jwt:Audience"] },
 
                         IssuerSigningKey = signingKey,
 
-                        // 🔴 This makes User.Identity.Name work
+                        // Makes User.Identity.Name work with the ID claim
                         NameClaimType = ClaimTypes.NameIdentifier,
-
                         ClockSkew = TimeSpan.Zero
                     };
 
-                    // 🔍 DEBUG LOGGING (you can remove later)
+                    // 🔍 DEBUG LOGGING
                     options.Events = new JwtBearerEvents
                     {
                         OnAuthenticationFailed = context =>
                         {
-                            Console.WriteLine("❌ JWT AUTH FAILED:");
-                            Console.WriteLine(context.Exception);
+                            Console.WriteLine($"❌ JWT AUTH FAILED: {context.Exception.Message}");
                             return Task.CompletedTask;
                         },
                         OnTokenValidated = context =>
@@ -84,6 +96,7 @@ namespace GooseAPI
 
             var app = builder.Build();
 
+            // 🚀 5. Configure Middleware Pipeline
             if (app.Environment.IsDevelopment())
             {
                 app.UseSwagger();
@@ -92,11 +105,13 @@ namespace GooseAPI
 
             app.UseCors("AllowAll");
 
-            // 🔴 ORDER MATTERS
+            // 🔴 ORDER MATTERS: Auth must come before MapControllers
             app.UseAuthentication();
             app.UseAuthorization();
 
             app.MapControllers();
+
+            Console.WriteLine("🦆 GooseNet API is starting up...");
             app.Run();
         }
     }

@@ -1,14 +1,18 @@
 ﻿using System;
-using System.Drawing;
 using System.Security.Cryptography;
 using System.Text;
-using static System.Net.Mime.MediaTypeNames;
 using System.Drawing.Imaging;
 using System.Runtime.InteropServices;
 using System.Globalization;
 using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
+using SixLabors.ImageSharp;
+using SixLabors.ImageSharp.PixelFormats;
+using SixLabors.ImageSharp.Processing;
+using SixLabors.ImageSharp.Drawing.Processing;
+using SixLabors.Fonts;
+
 
 namespace GooseAPI
 {
@@ -186,41 +190,57 @@ namespace GooseAPI
 
                 return result.ToString();
             }
-        
+
+
 
         public static string GenerateProfilePictureBase64(char c)
         {
-            int width = 256;
-            int height = 256;
+            const int size = 256;
+            string text = c.ToString().ToUpper();
 
-            using (Bitmap bitmap = new Bitmap(width, height))
-            using (Graphics graphics = Graphics.FromImage(bitmap))
+            // 1. Generate a consistent color based on the character 
+            // This ensures "G" for GooseNet always looks the same
+            int seed = (int)c;
+            Random random = new Random(seed);
+            Color bgColor = Color.FromRgb((byte)random.Next(40, 180), (byte)random.Next(40, 180), (byte)random.Next(40, 180));
+
+            using (Image<Rgba32> image = new Image<Rgba32>(size, size))
             {
-                // Random background color
-                Random random = new Random();
-                Color bgColor = Color.FromArgb(random.Next(256), random.Next(256), random.Next(256));
-                graphics.Clear(bgColor);
-
-                // Dynamic font size based on image height
-                float fontSize = height * 0.9f; // 60% of the height
-                using (System.Drawing.Font font = new System.Drawing.Font("Arial", fontSize, FontStyle.Bold, GraphicsUnit.Pixel))
+                // 2. Setup Font - Safer fallback for Linux/Docker
+                if (!SystemFonts.Collection.TryGet("Arial", out var family))
                 {
-                    // Center the text
-                    StringFormat format = new StringFormat
-                    {
-                        Alignment = StringAlignment.Center,
-                        LineAlignment = StringAlignment.Center
-                    };
-
-                    graphics.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAliasGridFit;
-                    graphics.DrawString(c.ToString(), font, Brushes.White, new RectangleF(0, 0, width, height), format);
+                    family = SystemFonts.Collection.Families.FirstOrDefault();
+                    if (family == null) throw new Exception("No fonts installed on this system.");
                 }
 
-                // Save and return Base64
-                using (MemoryStream ms = new MemoryStream())
+                // Use 0.5f to 0.6f of height to ensure the character stays inside the "safe zone"
+                Font font = family.CreateFont(size * 0.55f, FontStyle.Bold);
+
+                // 3. Perform Mutations
+                image.Mutate(ctx =>
                 {
-                    bitmap.Save(ms, ImageFormat.Png);
-                    return "data:image/png;base64," + Convert.ToBase64String(ms.ToArray());
+                    // Fill background
+                    ctx.Fill(bgColor);
+
+                    // Configure text options for perfect centering
+                    var options = new RichTextOptions(font)
+                    {
+                        HorizontalAlignment = HorizontalAlignment.Center,
+                        VerticalAlignment = VerticalAlignment.Center,
+                        Origin = new System.Numerics.Vector2(size / 2f, size / 2f),
+                        // This ensures the drawing engine treats the center of the glyph as the origin
+                        WrappingLength = size
+                    };
+
+                    // Draw the character in White
+                    ctx.DrawText(options, text, Color.White);
+                });
+
+                // 4. Convert to Base64
+                using (var ms = new MemoryStream())
+                {
+                    image.SaveAsPng(ms);
+                    return $"data:image/png;base64,{Convert.ToBase64String(ms.ToArray())}";
                 }
             }
         }
