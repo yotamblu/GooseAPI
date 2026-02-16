@@ -11,8 +11,7 @@ namespace GooseAPI
         public static void Main(string[] args)
         {
             // 🔴 Load .env BEFORE anything else
-            Env.Load();
-
+            DotNetEnv.Env.Load(Path.Combine(AppContext.BaseDirectory, ".env"));
             var builder = WebApplication.CreateBuilder(args);
 
             // 🔑 Shared signing key WITH KeyId (THIS FIXES IDX10503)
