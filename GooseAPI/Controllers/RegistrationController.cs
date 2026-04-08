@@ -1,9 +1,17 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using GooseAPI.Services;
+using Microsoft.AspNetCore.Mvc;
 
 namespace GooseAPI.Controllers
 {
     public class RegistrationController : Controller
     {
+        private readonly NewUserRegistrationNotifier _newUserNotifier;
+
+        public RegistrationController(NewUserRegistrationNotifier newUserNotifier)
+        {
+            _newUserNotifier = newUserNotifier;
+        }
+
         [HttpPost("/api/registration")]
         public IActionResult RegisterUser([FromBody] User userData)
         {
@@ -43,7 +51,9 @@ namespace GooseAPI.Controllers
                 });
             }
 
-            return Ok(new { message = "User Registered Successfully" });
+            bool emailSent = _newUserNotifier.Notify(userData.FullName ?? "", userData.Email ?? "", userData.UserName ?? "");
+
+            return Ok(new { message = "User Registered Successfully", notificationEmailSent = emailSent });
         }
     }
 }

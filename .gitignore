@@ -365,4 +365,5 @@ FodyWeavers.xsd
 
 
 GooseAPI/FireBaseConfig.cs
+GooseAPI/GmailNotificationSecrets.cs
 .env

@@ -1,4 +1,5 @@
 ﻿using DotNetEnv;
+using GooseAPI.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using System.Security.Claims;
@@ -80,6 +81,7 @@ namespace GooseAPI
                 });
 
             builder.Services.AddAuthorization();
+            builder.Services.AddSingleton<NewUserRegistrationNotifier>();
             builder.Services.AddControllers();
             builder.Services.AddEndpointsApiExplorer();
             builder.Services.AddSwaggerGen();
